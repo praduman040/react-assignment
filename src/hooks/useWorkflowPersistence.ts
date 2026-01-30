@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { WorkflowState } from "../types/workflow";
-import { supabase } from "../lib/supabase";
 
 export interface SavedWorkflow {
   id: string;
@@ -10,44 +9,57 @@ export interface SavedWorkflow {
   updated_at: string;
 }
 
+const STORAGE_KEY = "workflow_builder_data";
+
+function getStoredWorkflows(): SavedWorkflow[] {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+function setStoredWorkflows(data: SavedWorkflow[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
 export function useWorkflowPersistence() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const saveWorkflow = async (name: string, state: WorkflowState): Promise<string | null> => {
+  const saveWorkflow = async (
+    name: string,
+    state: WorkflowState
+  ): Promise<string | null> => {
     setSaving(true);
     setError(null);
 
     try {
-      const { data: existingData } = await supabase
-        .from("workflows")
-        .select("id")
-        .eq("name", name)
-        .maybeSingle();
+      const workflows = getStoredWorkflows();
+      const now = new Date().toISOString();
 
-      if (existingData) {
-        const { error: updateError } = await supabase
-          .from("workflows")
-          .update({ state, updated_at: new Date().toISOString() })
-          .eq("id", existingData.id);
+      const existing = workflows.find((w) => w.name === name);
 
-        if (updateError) throw updateError;
-        return existingData.id;
-      } else {
-        const { data, error: insertError } = await supabase
-          .from("workflows")
-          .insert({ name, state })
-          .select("id")
-          .maybeSingle();
-
-        if (insertError) throw insertError;
-        return data?.id ?? null;
+      if (existing) {
+        existing.state = state;
+        existing.updated_at = now;
+        setStoredWorkflows(workflows);
+        return existing.id;
       }
+
+      const newWorkflow: SavedWorkflow = {
+        id: crypto.randomUUID(),
+        name,
+        state,
+        created_at: now,
+        updated_at: now,
+      };
+
+      setStoredWorkflows([newWorkflow, ...workflows]);
+      return newWorkflow.id;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save workflow";
+      const message =
+        err instanceof Error ? err.message : "Failed to save workflow";
       setError(message);
-      console.error("Save workflow error:", err);
+      console.error(err);
       return null;
     } finally {
       setSaving(false);
@@ -59,18 +71,14 @@ export function useWorkflowPersistence() {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from("workflows")
-        .select("state")
-        .eq("id", id)
-        .maybeSingle();
-
-      if (fetchError) throw fetchError;
-      return data?.state ?? null;
+      const workflows = getStoredWorkflows();
+      const workflow = workflows.find((w) => w.id === id);
+      return workflow ? workflow.state : null;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load workflow";
+      const message =
+        err instanceof Error ? err.message : "Failed to load workflow";
       setError(message);
-      console.error("Load workflow error:", err);
+      console.error(err);
       return null;
     } finally {
       setLoading(false);
@@ -82,17 +90,17 @@ export function useWorkflowPersistence() {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from("workflows")
-        .select("id, name, state, created_at, updated_at")
-        .order("updated_at", { ascending: false });
-
-      if (fetchError) throw fetchError;
-      return (data ?? []) as SavedWorkflow[];
+      const workflows = getStoredWorkflows();
+      return workflows.sort(
+        (a, b) =>
+          new Date(b.updated_at).getTime() -
+          new Date(a.updated_at).getTime()
+      );
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load workflows";
+      const message =
+        err instanceof Error ? err.message : "Failed to load workflows";
       setError(message);
-      console.error("List workflows error:", err);
+      console.error(err);
       return [];
     } finally {
       setLoading(false);
@@ -104,17 +112,14 @@ export function useWorkflowPersistence() {
     setError(null);
 
     try {
-      const { error: deleteError } = await supabase
-        .from("workflows")
-        .delete()
-        .eq("id", id);
-
-      if (deleteError) throw deleteError;
+      const workflows = getStoredWorkflows().filter((w) => w.id !== id);
+      setStoredWorkflows(workflows);
       return true;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to delete workflow";
+      const message =
+        err instanceof Error ? err.message : "Failed to delete workflow";
       setError(message);
-      console.error("Delete workflow error:", err);
+      console.error(err);
       return false;
     } finally {
       setSaving(false);
@@ -131,3 +136,4 @@ export function useWorkflowPersistence() {
     error,
   };
 }
+

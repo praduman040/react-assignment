@@ -1,28 +1,12 @@
 import { useState } from "react";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { AuthPage } from "./pages/AuthPage";
 import { WorkflowCanvas } from "./components/WorkflowCanvas";
 import { WorkflowManager } from "./components/WorkflowManager";
 import { useWorkflowReducer } from "./hooks/useWorkflowReducer";
-import { Save, LogOut, Loader } from "lucide-react";
+import { Save } from "lucide-react";
 
-function WorkflowApp() {
-  const { user, loading: authLoading, signOut } = useAuth();
+function App() {
   const [state, dispatch] = useWorkflowReducer();
   const [showManager, setShowManager] = useState(false);
-
-  if (authLoading) {
-    return (
-      <div className="app-loading">
-        <Loader className="app-loading__spinner" />
-        <p>Loading...</p>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <AuthPage />;
-  }
 
   const handleAddNode = (
     parentId: string,
@@ -56,10 +40,6 @@ function WorkflowApp() {
     } as any);
   };
 
-  const handleSignOut = async () => {
-    await signOut();
-  };
-
   return (
     <div className="app">
       <header className="app__header">
@@ -69,11 +49,9 @@ function WorkflowApp() {
             <Save size={18} />
             <span>Save & Load</span>
           </button>
-          <button className="app__signout-btn" onClick={handleSignOut} title="Sign out">
-            <LogOut size={18} />
-          </button>
         </div>
       </header>
+
       <main className="app__main">
         <WorkflowCanvas
           state={state}
@@ -91,14 +69,6 @@ function WorkflowApp() {
         />
       )}
     </div>
-  );
-}
-
-function App() {
-  return (
-    <AuthProvider>
-      <WorkflowApp />
-    </AuthProvider>
   );
 }
 
